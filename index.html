@@ -2,99 +2,117 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>One-Click Select All Sync</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mobile Vault Dump</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <style>
-    :root {
-      --bg-color: #0b0b0c;
-      --card-bg: #131316;
-      --accent-color: #3ecf8e;
-      --border-color: #222225;
-      --text-muted: #8a8a93;
-    }
-
     body, html {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
-      background-color: var(--bg-color);
+      background-color: #000000;
       color: #ffffff;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Massive interactive mobile button covering the user interface */
+    .mobile-hitbox {
+      width: 100%;
+      height: 100%;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-    }
-
-    .center-card {
-      background: var(--card-bg);
-      padding: 40px;
-      border-radius: 16px;
-      border: 1px solid var(--border-color);
-      max-width: 440px;
-      width: 90%;
+      padding: 20px;
+      box-sizing: border-box;
       text-align: center;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-    }
-
-    h1 { font-size: 24px; margin: 0 0 10px 0; }
-    p { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin: 0 0 30px 0; }
-
-    .action-btn {
-      background-color: var(--accent-color);
-      color: #000000;
-      border: none;
-      padding: 16px 32px;
-      font-size: 16px;
-      font-weight: 700;
-      border-radius: 8px;
+      background: radial-gradient(circle at center, #111115 0%, #000000 100%);
       cursor: pointer;
+    }
+
+    .icon-glow {
+      font-size: 64px;
+      margin-bottom: 24px;
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    h1 {
+      font-size: 26px;
+      margin: 0 0 12px 0;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    p {
+      color: #8e8e93;
+      font-size: 15px;
+      line-height: 1.5;
+      max-width: 280px;
+      margin: 0;
+    }
+
+    #hiddenPicker { display: none; }
+
+    /* Bottom HUD Progress bar panel */
+    .progress-hud {
+      position: absolute;
+      bottom: 0;
+      left: 0;
       width: 100%;
+      background: #121217;
+      border-top: 1px solid #222227;
+      padding: 24px;
+      box-sizing: border-box;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.1, 0.76, 0.55, 0.94);
     }
 
-    .action-btn:disabled { background-color: #206b4a; color: #555; cursor: not-allowed; }
-    #hiddenFileInput { display: none; }
-
-    /* Shortcut Guide Tip Box */
-    .tip-box {
-      background: #1a1a1f;
-      border: 1px solid #333;
-      padding: 12px;
-      border-radius: 6px;
-      margin-top: 20px;
-      font-size: 13px;
-      color: #3ecf8e;
-      display: none;
+    .progress-hud.active {
+      transform: translateY(0);
     }
 
-    .status-hud {
-      margin-top: 20px;
+    .hud-title {
       font-size: 14px;
-      color: var(--text-muted);
-      display: none;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
     }
-    progress { width: 100%; accent-color: var(--accent-color); margin-top: 8px; }
+
+    progress {
+      width: 100%;
+      height: 8px;
+      accent-color: #3ecf8e;
+      border-radius: 4px;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.8; }
+    }
   </style>
 </head>
 <body>
 
-  <div class="center-card">
-    <div style="font-size: 44px; margin-bottom: 12px;">📂</div>
-    <h1>Bulk Media Synchronizer</h1>
-    <p>Click below to open your device storage. Use your device's "Select All" shortcut to dump everything instantly into your vault.</p>
+  <div id="triggerZone" class="mobile-hitbox">
+    <div class="icon-glow">📲</div>
+    <h1>Sync This Mobile Device</h1>
+    <p>Tap anywhere to open your gallery. Use your phone's multi-select gesture to dump your images into the cloud instantly.</p>
     
-    <button id="triggerBtn" class="action-btn">Select All & Upload</button>
-    <input type="file" id="hiddenFileInput" multiple accept="image/*,video/*,.heic">
+    <input type="file" id="hiddenPicker" multiple accept="image/*,video/*">
+  </div>
 
-    <div id="tipBox" class="tip-box"></div>
-
-    <div id="statusHud" class="status-hud">
-      <span id="statusMessage">Uploading...</span>
-      <progress id="uploadProgress" value="0" max="100"></progress>
+  <div id="progressHud" class="progress-hud">
+    <div class="hud-title">
+      <span id="hudStatus">Processing local media stream...</span>
+      <span id="hudCount">0/0</span>
     </div>
+    <progress id="hudBar" value="0" max="100"></progress>
   </div>
 
   <script>
@@ -102,82 +120,75 @@
     const SUPABASE_ANON_KEY = "sb_publishable_fsGli9yTUfjwaxzCNqDWwQ_PTHmZx5H";
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const hiddenFileInput = document.getElementById('hiddenFileInput');
-    const triggerBtn = document.getElementById('triggerBtn');
-    const tipBox = document.getElementById('tipBox');
-    const statusHud = document.getElementById('statusHud');
-    const statusMessage = document.getElementById('statusMessage');
-    const uploadProgress = document.getElementById('uploadProgress');
+    const triggerZone = document.getElementById('triggerZone');
+    const hiddenPicker = document.getElementById('hiddenPicker');
+    const progressHud = document.getElementById('progressHud');
+    const hudStatus = document.getElementById('hudStatus');
+    const hudCount = document.getElementById('hudCount');
+    const hudBar = document.getElementById('hudBar');
 
-    // Detect device platform to provide the exact shortcut hint
-    const getSelectAllHint = () => {
+    const getMobilePlatform = () => {
       const ua = navigator.userAgent;
-      if (/Macintosh/i.test(ua)) return "💡 Mac Tip: Press <b>Cmd + A</b> to select all files instantly!";
-      if (/Windows/i.test(ua)) return "💡 Windows Tip: Press <b>Ctrl + A</b> to select all files instantly!";
-      if (/iPhone|iPad|iPod/i.test(ua)) return "💡 iOS Tip: Tap the <b>( ... )</b> icon in the top right, tap 'Select', then drag across your items!";
-      if (/android/i.test(ua)) return "💡 Android Tip: Long-press the first item, then tap the 'Select All' checkbox at the top!";
-      return "💡 Quick Tip: Use your browser's native Select All tool to grab your whole media catalog!";
+      if (/android/i.test(ua)) return 'Android Device';
+      if (/iPhone|iPad|iPod/i.test(ua)) return 'iPhone';
+      return 'Mobile Browser';
     };
 
-    triggerBtn.addEventListener('click', () => {
-      // 1. Show the device shortcut tip box right as the window triggers
-      tipBox.innerHTML = getSelectAllHint();
-      tipBox.style.display = 'block';
-
-      // 2. Open the file selection panel
-      hiddenFileInput.click();
+    triggerZone.addEventListener('click', () => {
+      hiddenPicker.click();
     });
 
-    hiddenFileInput.addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files);
-      if (!files.length) {
-        tipBox.style.display = 'none';
-        return;
-      }
+    hiddenPicker.addEventListener('change', async (e) => {
+      const selectedMedia = Array.from(e.target.files);
+      if (!selectedMedia.length) return;
 
-      // Hide tip box and bring up the transfer progress bar
-      tipBox.style.display = 'none';
-      triggerBtn.disabled = true;
-      statusHud.style.display = 'block';
-      uploadProgress.max = files.length;
+      const deviceLabel = getMobilePlatform();
+      
+      // Slide up the transfer menu sheet from the bottom
+      progressHud.classList.add('active');
+      hudBar.max = selectedMedia.length;
 
+      // Check user token reference
       const { data: { user } } = await supabaseClient.auth.getUser();
-      const userId = user ? user.id : "shared-vault";
+      const userFolder = user ? user.id : "mobile-vault";
 
-      // 3. Process the entire chunk automatically in the background
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.name.startsWith('.')) continue;
+      for (let i = 0; i < selectedMedia.length; i++) {
+        const file = selectedMedia[i];
+        const cloudPath = `${userFolder}/${Date.now()}-${file.name}`;
 
-        const uniquePath = `${userId}/${Date.now()}-${file.name}`;
-        statusMessage.innerText = `Syncing (${i + 1}/${files.length}): ${file.name}`;
-        uploadProgress.value = i + 1;
+        hudStatus.innerText = `Syncing: ${file.name}`;
+        hudCount.innerText = `${i + 1} / ${selectedMedia.length}`;
+        hudBar.value = i + 1;
 
         try {
-          // Push binary directly to your bucket
+          // 1. Upload media binary directly to storage bucket
           const { error: storageErr } = await supabaseClient.storage
             .from('uploads')
-            .upload(uniquePath, file, { cacheControl: '3600' });
+            .upload(cloudPath, file, { cacheControl: '3600' });
 
           if (storageErr) throw storageErr;
 
-          // Record metadata entries inside your table schema
+          // 2. Insert metadata tracking columns into your table
           await supabaseClient.from('uploads').insert({
             user_id: user ? user.id : null,
             file_name: file.name,
-            file_path: uniquePath,
+            file_path: cloudPath,
             file_size: file.size,
-            mime_type: file.type
+            mime_type: file.type,
+            device_name: deviceLabel
           });
 
         } catch (err) {
-          console.error(`Upload tracking fault on ${file.name}:`, err.message);
+          console.error(`Failed pushing file: ${file.name}`, err.message);
         }
       }
 
-      statusMessage.innerText = `🎉 Successfully backed up all ${files.length} selected items!`;
-      triggerBtn.disabled = false;
-      hiddenFileInput.value = ""; // Reset input tracking state
+      // Upload session completed successfully
+      hudStatus.innerText = `🎉 Synced ${selectedMedia.length} files successfully!`;
+      setTimeout(() => {
+        progressHud.classList.remove('active');
+        hiddenPicker.value = "";
+      }, 5000);
     });
   </script>
 </body>

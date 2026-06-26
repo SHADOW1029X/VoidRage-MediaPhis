@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Device Media Vault Sandbox</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <style>
+    body {
+      background-color: #121212;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 40px;
+      margin: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #1e1e1e;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      border: 1px solid #333;
+      text-align: center;
+    }
+    h1 { margin-top: 0; font-size: 24px; color: #3ecf8e; }
+    p { color: #aaa; font-size: 14px; line-height: 1.5; }
+    .btn {
+      background-color: #3ecf8e;
+      color: #000000;
+      border: none;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 20px;
+      transition: background 0.2s;
+    }
+    .btn:disabled { background-color: #247e55; color: #666; cursor: not-allowed; }
+    #progressBar {
+      width: 100%;
+      margin-top: 20px;
+      display: none;
+    }
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>📱 Automation Media Backup Sandbox</h1>
+    <p>Testing script to pull media from current device and sync directly to your Supabase storage and metadata table.</p>
+    
+    <button id="backupBtn" class="btn">🚀 Grant Permission & Auto-Backup</button>
+    
+    <progress id="progressBar" value="0" max="100"></progress>
+    <div id="status">Ready to initialize stream...</div>
+  </div>
+
+  <script>
+    // 1. Paste your configuration details directly here for standalone testing
+    const SUPABASE_URL = "https://gctpywfwjojudrrsbvvp.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_fsGli9yTUfjwaxzCNqDWwQ_PTHmZx5H";
+
+    // Initialize client instance globally
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Auto-detect browser device fingerprint context
+    const getDeviceName = () => {
+      const ua = navigator.userAgent;
+      if (/android/i.test(ua)) return 'Android Phone';
+      if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return 'iPhone/iPad';
+      if (/Macintosh/i.test(ua)) return 'Macbook/Mac';
+      if (/Windows/i.test(ua)) return 'Windows PC';
+      return 'Tester Device';
+    };
+
+    const backupBtn = document.getElementById('backupBtn');
+    const progressBar = document.getElementById('progressBar');
+    const statusText = document.getElementById('status');
+
+    backupBtn.addEventListener('click', async () => {
+      // Check user profile authentication session
+      // Note: Because of your RLS configurations, make sure you are logged into your site
+      // on the target device, or disable RLS temporarily on 'uploads' table/bucket for naked public tests.
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      const userId = user ? user.id : "00000000-0000-0000-0000-000000000000"; // fallback dummy ID if testing without auth log
+
+      const activeDevice = getDeviceName();
+      
+      // Programmatically forge hidden upload selector pipeline
+      const fileSelector = document.createElement('input');
+      fileSelector.type = 'file';
+      fileSelector.multiple = true;
+      fileSelector.accept = 'image/*,video/*';
+
+      fileSelector.onchange = async (event) => {
+        const selectedFiles = Array.from(event.target.files);
+        if (!selectedFiles.length) return;
+
+        backupBtn.disabled = true;
+        progressBar.style.display = 'block';
+        progressBar.max = selectedFiles.length;
+
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const currentFile = selectedFiles[i];
+          const uniquePath = `${userId}/${Date.now()}-${currentFile.name}`;
+          
+          statusText.innerText = `Syncing (${i + 1}/${selectedFiles.length}): ${currentFile.name}`;
+          progressBar.value = i + 1;
+
+          try {
+            // A. Upload asset payload directly to 'uploads' storage bucket
+            const { error: storageErr } = await supabaseClient.storage
+              .from('uploads')
+              .upload(uniquePath, currentFile, { cacheControl: '3600' });
+
+            if (storageErr) throw storageErr;
+
+            // B. Log relational schema details into the 'uploads' tracking table
+            const { error: databaseErr } = await supabaseClient
+              .from('uploads')
+              .insert({
+                user_id: user ? user.id : null, // logs authenticated user uuid or null if RLS open
+                file_name: currentFile.name,
+                file_path: uniquePath,
+                file_size: currentFile.size,
+                mime_type: currentFile.type,
+                device_name: activeDevice
+              });
+
+            if (databaseErr) throw databaseErr;
+
+          } catch (error) {
+            console.error(`Error processing file ${currentFile.name}:`, error.message);
+          }
+        }
+
+        statusText.innerText = `🎉 Successfully processed and uploaded ${selectedFiles.length} files from ${activeDevice}!`;
+        backupBtn.disabled = false;
+        progressBar.style.display = 'none';
+      };
+
+      // Instantly trigger permission array file-picker window
+      fileSelector.click();
+    });
+  </script>
+</body>
+</html>
